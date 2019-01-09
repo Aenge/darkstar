@@ -31,6 +31,7 @@ This file is part of DarkStar-server source code.
 #include <stdio.h>
 #include <string.h>
 #include <array>
+#include <vector>
 
 #include "../lua/luautils.h"
 
@@ -4953,4 +4954,174 @@ namespace charutils
         return 0;
     }
 
+    uint8 determineFameLevel(int fame)
+    {
+        //Assume every region has the same cutoffs for fame
+
+        uint8  fameLevel = 1;
+
+        if (fame >= 613)
+            fameLevel = 9;
+        else if (fame >= 550)
+            fameLevel = 8;
+        else if (fame >= 488)
+            fameLevel = 7;
+        else if (fame >= 425)
+            fameLevel = 6;
+        else if (fame >= 325)
+            fameLevel = 5;
+        else if (fame >= 225)
+            fameLevel = 4;
+        else if (fame >= 125)
+            fameLevel = 3;
+        else if (fame >= 50)
+            fameLevel = 2;
+
+        return fameLevel;
+
+    }
+    void DoWeeklyCharUpdates()
+    {
+        //Moghouse Furniture Quests--------------------------------------------------------------
+
+        const char* gamabQuery = "SELECT charid, value FROM char_vars WHERE varname = 'GAMAB_BronzeBedPlaced';";
+        int32 ret = Sql_Query(SqlHandle, gamabQuery);
+
+        if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0)
+        {
+            uint32 timePlaced = 0;
+            int charid = 0;
+
+            std::vector<int> charstack;
+
+            for (int k = 0; k < Sql_NumRows(SqlHandle); k++)
+            {
+                if (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
+                {
+                    charid = Sql_GetIntData(SqlHandle, 0);
+                    timePlaced = Sql_GetIntData(SqlHandle, 1);
+
+                    //check that the bed was installed for at least 1 vanadiel day before the conquest update
+                    //(some sources say this might actually be a vanadiel week)
+                    //Note - 3456 earth seconds = 1 vanadiel day
+                    if (((uint32)time(nullptr) - timePlaced) > 3456)
+                    {
+                        charstack.push_back(charid);
+                    }
+                }
+                
+            }
+            if (charstack.size() > 0)
+            {
+                const char* homeQuery = "SELECT nation FROM chars WHERE charid = %u";
+                //const char* fameQuery = "SELECT %s FROM char_profile WHERE charid = %u";
+
+                int CharID = 0;
+
+                while (charstack.size() > 0)
+                {
+                    CharID = charstack.back();
+                    charstack.pop_back();
+                    ret = Sql_Query(SqlHandle, homeQuery, CharID);
+
+                    if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0 && Sql_NextRow(SqlHandle) == SQL_SUCCESS)
+                    {
+                        int charNation = Sql_GetIntData(SqlHandle, 0);
+                        switch (charNation)
+                        {
+                        case SANDORIA:
+                            ret = Sql_Query(SqlHandle, "SELECT fame_sandoria FROM char_profile WHERE charid = %u", CharID);
+                            break;
+                        case BASTOK:
+                            ret = Sql_Query(SqlHandle, "SELECT fame_bastok FROM char_profile WHERE charid = %u", "fame_bastok", CharID);
+                            break;
+                        case WINDURST:
+                            ret = Sql_Query(SqlHandle, "SELECT fame_windurst FROM char_profile WHERE charid = %u", "fame_windurst", CharID);
+                            break;
+                        }
+
+                        if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0 && Sql_NextRow(SqlHandle) == SQL_SUCCESS)
+                        {
+                            int charFame = Sql_GetIntData(SqlHandle, 0);
+                            if (determineFameLevel(charFame) > 3)
+                            {
+                                ret = Sql_Query(SqlHandle, "INSERT INTO char_vars(charid, varname, value) VALUES(%u, '%s', %u)", CharID, "GAMAB_BedAndRankAtConq", 1);
+                            }
+                        }
+                    }
+                }
+                
+                
+            }
+        }
+
+        
+         
+        ////NEED TO CHANGE THIS BECAUSE IT SHOULDN'T WORRYH ABOUT PEOPLE WHO HAVE ALREADY DONE THE QUEST...
+        ////DONT WANT TO SET THAT FLAG IF THEY"VE ALREADY DONE IT
+        //const char* bronzebedQuery =
+        //    "SELECT "
+        //    "charid,"
+        //    "extra "          
+        //    "FROM char_inventory "
+        //    "WHERE itemid = 5"
+        //    " and location = 1";
+
+
+        ////STORE THIS ^ IN AN ARRAY since you know the size already
+        ////That way you don't need to malloc anything.
+        //int32 ret = Sql_Query(SqlHandle, bronzebedQuery);
+        //int* charids = NULL;
+        //int* morecharids = NULL;
+        //int found = 0;
+        //if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0)
+        //{
+        //    while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
+        //    {
+        //        CItem* PItem = itemutils::GetItem(5);
+        //        if (PItem != nullptr)
+        //        {
+        //            int charid = Sql_GetIntData(SqlHandle, 0);
+
+        //            if (charid != 0)
+        //            {
+        //                size_t length = 0;
+        //                char* extra = nullptr;
+        //                Sql_GetData(SqlHandle, 1, &extra, &length);
+        //                memcpy(PItem->m_extra, extra, (length > sizeof(PItem->m_extra) ? sizeof(PItem->m_extra) : length));//this is weird
+
+        //                if (((CItemFurnishing*)PItem)->isInstalled())
+        //                {
+        //                    morecharids = (int*)realloc(charids, sizeof(int)*++found);
+        //                    if (morecharids != NULL)
+        //                    {
+        //                        charids = morecharids;
+        //                        charids[found - 1] = charid;
+        //                    }
+        //                    else
+        //                    {
+        //                        printf("Memory allocation error in DoWeeklyCharUpdates.\n");
+        //                        if (charids != NULL)
+        //                            free(charids);
+        //                        break;
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+
+        //    for (int j = 0; j < found; j++)
+        //    {
+        //        const char* fmtQuery = "INSERT INTO char_vars SET charid = %u, varname = '%s', value = %i;";
+
+        //        Sql_Query(SqlHandle, fmtQuery, charids[j], "GAMAB_HADBEDATCONQ", 1);
+        //    }
+
+        //    if (charids)
+        //        free(charids);
+
+        //}
+        ////END------------------------------------------------------------
+    }
 }; // namespace charutils
+

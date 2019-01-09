@@ -184,6 +184,9 @@ namespace charutils
     bool    AddWeaponSkillPoints(CCharEntity*, SLOTTYPE, int);
 
     int32   GetVar(CCharEntity* PChar, const char* var);
+
+    void    DoWeeklyCharUpdates();
+    uint8   determineFameLevel(int);
 };
 
 #endif

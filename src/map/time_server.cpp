@@ -24,7 +24,7 @@
 #include "../common/showmsg.h"
 
 #include "utils/guildutils.h"
-#include "utils/instanceutils.h"
+#include "utils/instanceutils.h"    
 #include "time_server.h"
 #include "transport.h"
 #include "vana_time.h"
@@ -32,6 +32,7 @@
 #include "conquest_system.h"
 #include "lua/luautils.h"
 #include "entities/charentity.h"
+#include "utils/charutils.h"
 #include "latent_effect_container.h"
 
 
@@ -41,11 +42,13 @@ int32 time_server(time_point tick,CTaskMgr::CTask* PTask)
     // uint8 WeekDay = (uint8)CVanaTime::getInstance()->getWeekday();
 
     // weekly update for conquest (sunday at midnight)
-    if (CVanaTime::getInstance()->getSysWeekDay() == 1  && CVanaTime::getInstance()->getSysHour() == 0 && CVanaTime::getInstance()->getSysMinute() == 0)
+    //UNDO if (CVanaTime::getInstance()->getSysWeekDay() == 1  && CVanaTime::getInstance()->getSysHour() == 0 && CVanaTime::getInstance()->getSysMinute() == 0)
+    if (CVanaTime::getInstance()->getSysMinute() == 30)
     {
-        if (tick > (CVanaTime::getInstance()->lastConquestTally + 1h))
+        if (tick > (CVanaTime::getInstance()->lastConquestTally + 0.03h))
         {
             conquest::UpdateWeekConquest();
+            charutils::DoWeeklyCharUpdates();
             CVanaTime::getInstance()->lastConquestTally = tick;
         }
     }

@@ -132,6 +132,7 @@ This file is part of DarkStar-server source code.
 #include "packets/party_map.h"
 #include "packets/party_search.h"
 #include "packets/position.h"
+#include "packets/quest_mission_log.h"
 #include "packets/release.h"
 #include "packets/release_special.h"
 #include "packets/server_ip.h"
@@ -5276,6 +5277,35 @@ void SmallPacket0x0FA(map_session_data_t* session, CCharEntity* PChar, CBasicPac
             PChar->getStorage(LOC_STORAGE)->AddBuff(PItem->getStorage());
 
             PChar->pushPacket(new CInventorySizePacket(PChar));
+
+            //Moghouse furniture quests ------------------------------------------------------------------------------------------
+            if (ItemID == 5)
+            {
+                uint8 current = PChar->m_questLog[QUESTS_OTHER].current[100 / 8] & (1 << (100 % 8));
+                uint8 complete = PChar->m_questLog[QUESTS_OTHER].complete[100 / 8] & (1 << (100 % 8));
+                //If they haven't completed or accepted the quest yet
+                if (current == 0 && complete == 0)
+                {
+                    const char* checkQuery = "SELECT value from char_vars where charid = %u AND varname = '%s'";
+                    int32 ret = Sql_Query(SqlHandle, checkQuery, PChar->id, "GAMAB_BronzeBedPlaced");
+
+                    if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) == 0)
+                    {
+                        const char* varQuery = "INSERT INTO char_vars(charid, varname, value) VALUES(%u, '%s', %u)";
+                        ret = Sql_Query(SqlHandle, varQuery, PChar->id, "GAMAB_BronzeBedPlaced", (uint32)time(nullptr));
+
+                        if (ret == SQL_ERROR)
+                        {
+                            printf("Error in Give A Moogle A break (packet_system.cpp)\n");
+                        }
+                    }
+                    else
+                    {
+                        printf("Bronze bed already placed OR sql error occurred");
+                    }
+                    //----------------------------------------------------------------------------------------------------------------
+                }
+            }
         }
         PChar->pushPacket(new CInventoryItemPacket(PItem, containerID, slotID));
         PChar->pushPacket(new CInventoryFinishPacket());
@@ -5350,6 +5380,50 @@ void SmallPacket0x0FB(map_session_data_t* session, CCharEntity* PChar, CBasicPac
                 PChar->getStorage(LOC_STORAGE)->AddBuff(-(int8)PItem->getStorage());
 
                 PChar->pushPacket(new CInventorySizePacket(PChar));
+
+                //Moghouse Furniture Quests------------------------------------------------------------------
+                if (ItemID == 5)
+                {
+                    //Check if they have the charvar associated with this quest set
+                    const char* varQuery = "SELECT value FROM char_vars WHERE charid = %u AND varname = '%s'";
+                    int32 ret = Sql_Query(SqlHandle, varQuery, PChar->id, "GAMAB_BronzeBedPlaced");
+                    if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) > 0)
+                    {
+                        int8 bedInstalled = 0;
+                        CItemFurnishing* PBronzeBed = (CItemFurnishing*)nullptr;
+                        //Check there are no other bronze beds still installed in both mog safes
+                        CItemContainer* PBank = (CItemContainer*)nullptr;
+
+                        for (uint8 LOC_ID = LOC_MOGSAFE; LOC_ID <= LOC_MOGSAFE2; LOC_ID = LOC_ID + (LOC_MOGSAFE2 - LOC_MOGSAFE))
+                        {
+                            PBank = PChar->getStorage(LOC_ID);
+
+                            for (uint8 Slot_ID = 0; Slot_ID < PBank->GetSize(); Slot_ID++)
+                            {
+                                PBronzeBed = (CItemFurnishing*)PBank->GetItem(Slot_ID);
+                                if (PBronzeBed != nullptr)
+                                {
+                                    if (PBronzeBed->getID() == 5)
+                                    {
+                                        if (PBronzeBed->isInstalled())
+                                        {
+                                            bedInstalled = 1;
+                                        }
+                                    }
+                                }
+
+                            }
+                        }
+                     
+                        if (!bedInstalled) 
+                        {
+                            //Remove the character variable
+                            const char* remQuery = "DELETE FROM char_vars WHERE charid = %u AND varname = '%s' LIMIT 1;";
+                            Sql_Query(SqlHandle, remQuery, PChar->id, "GAMAB_BronzeBedPlaced");
+                        }
+                    }
+                }
+                //-------------------------------------------------------------------------------------------
             }
             PChar->pushPacket(new CInventoryItemPacket(PItem, containerID, PItem->getSlotID()));
             PChar->pushPacket(new CInventoryFinishPacket());
